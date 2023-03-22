@@ -1,0 +1,32 @@
+{
+    "name": "quser",
+    "version": "1.0.0",
+    "command_name": "quser-bof",
+    "extension_author": "netero1010",
+    "original_author": "netero1010",
+    "repo_url": "https://github.com/netero1010/Quser-BOF",
+    "help": "Quser implementation using Windows API",
+    "long_help": "quser-bof <target ip/hostname>",
+    "depends_on": "coff-loader",
+    "entrypoint": "go",
+    "files": [
+        {
+            "os": "windows",
+            "arch": "amd64",
+            "path": "quser.x64.o"
+        },
+        {
+            "os": "windows",
+            "arch": "386",
+            "path": "quser.x86.o"
+        }
+    ],
+    "arguments": [
+        {
+            "name": "target",
+            "desc": "Target ip/hostname",
+            "type": "string",
+            "optional": false
+        }
+    ]
+}
