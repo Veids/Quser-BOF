@@ -4,11 +4,39 @@
 
 DECLSPEC_IMPORT WINBASEAPI DWORD WINAPI KERNEL32$GetLastError (void);
 DECLSPEC_IMPORT WINBASEAPI BOOL WINAPI KERNEL32$FileTimeToSystemTime (const FILETIME*, LPSYSTEMTIME);
+DECLSPEC_IMPORT WINBASEAPI DWORD WINAPI KERNEL32$GetCurrentProcessId (void);
+DECLSPEC_IMPORT WINBASEAPI BOOL WINAPI KERNEL32$ProcessIdToSessionId (DWORD dwProcessId, DWORD *pSessionId);
+DECLSPEC_IMPORT WINBASEAPI DWORD WINAPI KERNEL32$GetTickCount (void);
+
+DECLSPEC_IMPORT BOOL __cdecl USER32$GetLastInputInfo (PLASTINPUTINFO);
+
 DECLSPEC_IMPORT WINBASEAPI HANDLE WINAPI WTSAPI32$WTSOpenServerA (LPSTR);
 DECLSPEC_IMPORT WINBASEAPI BOOL WINAPI WTSAPI32$WTSEnumerateSessionsA (HANDLE, DWORD, DWORD, PWTS_SESSION_INFOA *, DWORD *);
 DECLSPEC_IMPORT WINBASEAPI BOOL WINAPI WTSAPI32$WTSQuerySessionInformationA (HANDLE, DWORD, WTS_INFO_CLASS, LPSTR *, DWORD *);
 DECLSPEC_IMPORT WINBASEAPI void WINAPI WTSAPI32$WTSFreeMemory (PVOID);
 DECLSPEC_IMPORT WINBASEAPI void WINAPI WTSAPI32$WTSCloseServer (HANDLE);
+
+DECLSPEC_IMPORT int __cdecl MSVCRT$strcmp(const char*, const char*);
+
+DWORD getLastInput(DWORD currentSessionId){
+	DWORD processId = KERNEL32$GetCurrentProcessId();	
+	DWORD sessionId = 0;
+	if(!KERNEL32$ProcessIdToSessionId(processId, &sessionId))
+		return -1;
+
+	if(sessionId != currentSessionId)
+		return -1;
+
+	LASTINPUTINFO lii;
+	lii.cbSize = sizeof(LASTINPUTINFO);
+
+	if(!USER32$GetLastInputInfo(&lii))
+		return -1;
+
+	DWORD elapsed = KERNEL32$GetTickCount() - lii.dwTime;
+
+	return elapsed;
+}
 
 void go(char * args, int alen)
 {	
@@ -33,7 +61,7 @@ void go(char * args, int alen)
 		else
 			BeaconPrintf(CALLBACK_OUTPUT, "ERROR %d: Could not connect to %s.", KERNEL32$GetLastError(), targetHost);
 	} else {
-		BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15s%-15s%-18s%-20s%s", "UserDomain", "UserName", "SessionName", "SessionID" , "State", "SourceAddress", "SourceClientName", "IdleTime");
+		BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15s%-15s%-18s%-20s%s\n", "UserDomain", "UserName", "SessionName", "SessionID" , "State", "SourceAddress", "SourceClientName", "IdleTime");
 		for (unsigned int i = 0; i < dwCount; i++)
 		{
 			WTS_SESSION_INFO si = pwsi[i];
@@ -100,12 +128,21 @@ void go(char * args, int alen)
 					stateInfo = "Idle";
 				else 
 					stateInfo = "Unknown";
-				if(addrFamily == "Unspecified")
-					BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%-18s%s", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, "-", "-");
+				if(MSVCRT$strcmp(addrFamily, "Unspecified") == 0){
+						DWORD durationInMillis = getLastInput(si.SessionId);
+						if(durationInMillis == -1) {
+							BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%-18s%-20s%s\n", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, "-", "-", "-");
+						} else {
+							long seconds = (durationInMillis / 1000) % 60;
+							long minutes = (durationInMillis / (1000 * 60)) % 60;
+							long hours = (durationInMillis / (1000 * 60 * 60)) % 24;
+							BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%-18s%-20s%dh %dm %ds\n", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, "-", "-", hours, minutes, seconds);
+						}
+				}
 				else if(!getResult)
-					BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%u.%u.%u.%-6u%s", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, clientAddressStruct->Address[2], clientAddressStruct->Address[3], clientAddressStruct->Address[4], clientAddressStruct->Address[5], clientName);
+					BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%u.%u.%u.%-6u%s\n", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, clientAddressStruct->Address[2], clientAddressStruct->Address[3], clientAddressStruct->Address[4], clientAddressStruct->Address[5], clientName);
 				else 
-					BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%u.%u.%u.%-10u%-20s%dh %dm %ds", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, clientAddressStruct->Address[2], clientAddressStruct->Address[3], clientAddressStruct->Address[4], clientAddressStruct->Address[5], clientName, idleTime.wHour, idleTime.wMinute, idleTime.wSecond);
+					BeaconPrintf(CALLBACK_OUTPUT, "%-20s%-25s%-15s%-15i%-15s%u.%u.%u.%-6u%-20s%dh %dm %ds\n", userDomain, userName, si.pWinStationName, si.SessionId, stateInfo, clientAddressStruct->Address[2], clientAddressStruct->Address[3], clientAddressStruct->Address[4], clientAddressStruct->Address[5], clientName, idleTime.wHour, idleTime.wMinute, idleTime.wSecond);
 			}
 		}
 	}
